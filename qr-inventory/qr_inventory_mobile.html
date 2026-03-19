@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>QR Inventory – Mobile</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <style>
+    :root {
+      --inset-bottom: env(safe-area-inset-bottom);
+    }
+
+    body {
+      background: #020617;
+      color: #e5e7eb;
+    }
+
+    video {
+      background: #000;
+    }
+
+    canvas {
+      display: none;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+  <audio id="scanSound">
+    <source src="beep.mp3" type="audio/mpeg">
+  </audio>
+  <div class="flex-1 flex flex-col max-w-md mx-auto w-full px-3 pt-3 pb-24">
+    <header class="flex items-center justify-between mb-3">
+      <div>
+        <h1 class="text-lg font-semibold text-white">QR Inventory</h1>
+        <p class="text-[11px] text-slate-400">Mobile scanner • local data only</p>
+      </div>
+      <div class="flex items-center gap-1">
+        <input id="nameInput" class="border border-slate-600 bg-slate-900 text-xs rounded-lg px-2 py-1 w-24"
+          placeholder="Your name" />
+        <button id="signInBtn" class="px-2 py-1 text-xs bg-emerald-500 text-black rounded-lg font-semibold">Sign
+          in</button>
+        <button id="signOutBtn" class="hidden px-2 py-1 text-[11px] border border-slate-500 rounded-lg">Sign
+          out</button>
+      </div>
+    </header>
+
+    <main class="flex-1">
+      <section id="panel-scan" class="flex flex-col gap-3 h-full">
+        <div class="bg-slate-900/60 border border-slate-700 rounded-2xl p-3 flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-slate-300 font-medium">Scanner</div>
+            <div class="flex gap-2">
+              <button id="startScan"
+                class="px-3 py-1.5 rounded-full text-xs bg-emerald-500 text-black font-semibold">Start</button>
+              <button id="stopScan"
+                class="hidden px-3 py-1.5 rounded-full text-xs border border-slate-500">Stop</button>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-slate-400 mt-1">
+            <span>On scan</span>
+            <select id="scanActionSelect"
+              class="border border-slate-700 bg-slate-900 text-[11px] rounded-full px-2 py-1">
+              <option value="toggle">Toggle IN / OUT</option>
+              <option value="in">Always IN</option>
+              <option value="out">Always OUT</option>
+              <option value="fill">Fill code only</option>
+            </select>
+          </div>
+
+          <div class="mt-2 rounded-2xl overflow-hidden border border-slate-700">
+            <video id="video" style="display: none;" class="w-full aspect-[9/16] object-cover" playsinline
+              muted></video>
+            <canvas id="qrCanvas" class="w-full aspect-[9/16] object-cover"></canvas>
+          </div>
+
+          <p class="text-[11px] text-slate-400 leading-snug mt-1">
+            Point the camera at a QR code. Make sure the code is well lit and centered.
+          </p>
+          <div id="scanMsg" class="text-[11px] text-rose-400 min-h-[1.3rem]"></div>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-700 rounded-2xl p-3 flex flex-col gap-2">
+          <div class="text-xs font-medium text-slate-200 mb-1">Add / Edit item</div>
+          <div class="flex flex-col gap-2">
+            <div>
+              <label class="text-[11px] text-slate-400">QR / Code</label>
+              <input id="codeInput"
+                class="mt-0.5 border border-slate-700 bg-slate-950 rounded-xl px-3 py-2 text-sm w-full"
+                placeholder="Scanned code or type manually" />
+            </div>
+            <div>
+              <label class="text-[11px] text-slate-400">Name</label>
+              <input id="itemNameInput"
+                class="mt-0.5 border border-slate-700 bg-slate-950 rounded-xl px-3 py-2 text-sm w-full"
+                placeholder="Item name" />
+            </div>
+
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <label class="text-[11px] text-slate-400">Category</label>
+                <select id="categorySelect"
+                  class="mt-0.5 border border-slate-700 bg-slate-950 rounded-xl px-3 py-2 text-sm w-full"></select>
+              </div>
+              <div class="flex-1">
+                <label class="text-[11px] text-slate-400">SKU (optional)</label>
+                <input id="skuInput"
+                  class="mt-0.5 border border-slate-700 bg-slate-950 rounded-xl px-3 py-2 text-sm w-full" />
+              </div>
+            </div>
+
+            <div>
+              <label class="text-[11px] text-slate-400">Note</label>
+              <input id="noteInput"
+                class="mt-0.5 border border-slate-700 bg-slate-950 rounded-xl px-3 py-2 text-sm w-full"
+                placeholder="Location, who took it, etc." />
+            </div>
+
+            <div class="mt-1 border-t border-slate-800 pt-2">
+              <div class="text-[11px] text-slate-400 mb-1">Add category</div>
+              <div class="flex gap-1 mb-1">
+                <input id="newCatEmoji"
+                  class="border border-slate-700 bg-slate-950 rounded-xl px-2 py-2 text-base w-12 text-center"
+                  value="📦" />
+                <input id="newCatName" class="flex-1 border border-slate-700 bg-slate-950 rounded-xl px-3 py-2 text-sm"
+                  placeholder="e.g. Cables, Screens, Tools" />
+                <button id="addCatBtn" class="px-3 py-2 text-[11px] rounded-xl border border-slate-600 text-slate-100">+
+                  Cat</button>
+              </div>
+              <div id="catMsg" class="text-[11px] text-slate-400"></div>
+            </div>
+
+            <div class="flex gap-2 mt-2">
+              <button id="addItemBtn" class="flex-1 bg-emerald-500 text-black font-semibold rounded-xl py-2 text-sm">
+                Save item
+              </button>
+              <button id="clearAddBtn" class="px-3 py-2 rounded-xl border border-slate-600 text-xs">
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-items" class="hidden h-full flex flex-col gap-3">
+        <div class="bg-slate-900/60 border border-slate-700 rounded-2xl p-3 flex flex-col gap-2">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-medium text-slate-200">Items</span>
+          </div>
+          <div class="flex gap-2 mb-1">
+            <input id="searchInput" class="flex-1 border border-slate-700 bg-slate-950 rounded-xl px-3 py-2 text-sm"
+              placeholder="Search name, code, note" />
+            <select id="filterCat" class="border border-slate-700 bg-slate-950 rounded-xl px-2 py-2 text-[11px]">
+              <option value="all">All</option>
+            </select>
+          </div>
+          <div id="itemsGrid" class="flex flex-col gap-2 max-h-[55vh] overflow-y-auto pr-1"></div>
+          <p id="noItems" class="hidden text-[11px] text-slate-400">
+            No items yet. Add some from the Scan tab.
+          </p>
+        </div>
+      </section>
+
+      <section id="panel-logs" class="hidden h-full flex flex-col gap-3">
+        <div class="bg-slate-900/60 border border-slate-700 rounded-2xl p-3 flex flex-col gap-2">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-medium text-slate-200">Logs</span>
+            <button id="exportCsvBtn" class="px-3 py-1.5 rounded-full border border-slate-600 text-[11px]">
+              Export CSV
+            </button>
+          </div>
+          <div class="grid grid-cols-2 gap-2 mb-2">
+            <select id="logFilterUser" class="border border-slate-700 bg-slate-950 rounded-xl px-2 py-2 text-[11px]">
+              <option value="all">All users</option>
+            </select>
+            <select id="logFilterType" class="border border-slate-700 bg-slate-950 rounded-xl px-2 py-2 text-[11px]">
+              <option value="all">All actions</option>
+              <option value="in">Check IN</option>
+              <option value="out">Check OUT</option>
+              <option value="create">Created</option>
+              <option value="delete">Deleted</option>
+            </select>
+            <select id="logFilterItem" class="border border-slate-700 bg-slate-950 rounded-xl px-2 py-2 text-[11px]">
+              <option value="all">All items</option>
+            </select>
+            <select id="logFilterCat" class="border border-slate-700 bg-slate-950 rounded-xl px-2 py-2 text-[11px]">
+              <option value="all">All categories</option>
+            </select>
+          </div>
+
+          <div class="max-h-[55vh] overflow-y-auto border border-slate-800 rounded-xl">
+            <table class="w-full text-[11px]">
+              <thead class="bg-slate-900/80 text-slate-300 sticky top-0">
+                <tr>
+                  <th class="text-left px-2 py-1">Time</th>
+                  <th class="text-left px-2 py-1">User</th>
+                  <th class="text-left px-2 py-1">Type</th>
+                  <th class="text-left px-2 py-1">Item</th>
+                  <th class="text-left px-2 py-1">Cat</th>
+                  <th class="text-left px-2 py-1">Meta</th>
+                </tr>
+              </thead>
+              <tbody id="logsBody" class="bg-slate-950/60"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <nav
+    class="fixed bottom-0 left-0 right-0 bg-slate-950/95 border-t border-slate-800 pt-1 pb-[calc(0.4rem+var(--inset-bottom))]">
+    <div class="max-w-md mx-auto flex justify-around px-4">
+      <button data-panel="scan" class="nav-btn flex flex-col items-center gap-0.5 text-xs text-emerald-400">
+        <span class="text-lg">📷</span>
+        <span>Scan</span>
+      </button>
+      <button data-panel="items" class="nav-btn flex flex-col items-center gap-0.5 text-xs text-slate-400">
+        <span class="text-lg">📦</span>
+        <span>Items</span>
+      </button>
+      <button data-panel="logs" class="nav-btn flex flex-col items-center gap-0.5 text-xs text-slate-400">
+        <span class="text-lg">📜</span>
+        <span>Logs</span>
+      </button>
+    </div>
+  </nav>
+
+  <script>
+    const LS_KEYS = {
+      items: 'qrInv.items.mobile.v1',
+      logs: 'qrInv.logs.mobile.v1',
+      users: 'qrInv.users.mobile.v1',
+      session: 'qrInv.session.mobile.v1',
+      categories: 'qrInv.categories.mobile.v1'
+    };
+    const DEFAULT_CATS = [
+      { id: 'electronics', name: 'Electronics', emoji: '📱' },
+      { id: 'hardware', name: 'Hardware', emoji: '🔧' },
+      { id: 'lighting', name: 'Lighting', emoji: '💡' },
+      { id: 'audio', name: 'Audio', emoji: '🔊' }
+    ];
+
+    const scanSound = document.getElementById("scanSound");
+    const nowISO = () => new Date().toISOString();
+    const fmtDate = iso => new Date(iso).toLocaleString();
+    const uid = () => Math.random().toString(36).slice(2, 10);
+    const slugify = s => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+    const load = (k, f) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : f; } catch { return f; } };
+    const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+    let session = load(LS_KEYS.session, { userId: '', name: '' });
+    let users = load(LS_KEYS.users, []);
+    let items = load(LS_KEYS.items, []);
+    let logs = load(LS_KEYS.logs, []);
+    let categories = load(LS_KEYS.categories, DEFAULT_CATS);
+
+    // Auth
+    const nameInput = document.getElementById('nameInput');
+    const signInBtn = document.getElementById('signInBtn');
+    const signOutBtn = document.getElementById('signOutBtn');
+    function renderAuth() {
+      if (session.userId) {
+        nameInput.classList.add('hidden');
+        signInBtn.classList.add('hidden');
+        signOutBtn.classList.remove('hidden');
+        signOutBtn.textContent = session.name;
+      } else {
+        nameInput.classList.remove('hidden');
+        signInBtn.classList.remove('hidden');
+        signOutBtn.classList.add('hidden');
+      }
+    }
+    renderAuth();
+    signInBtn.addEventListener('click', () => {
+      const name = (nameInput.value || '').trim();
+      if (!name) return alert('Enter your name');
+      let user = users.find(u => u.name.toLowerCase() === name.toLowerCase());
+      if (!user) {
+        user = { id: uid(), name, createdAt: nowISO() };
+        users.push(user); save(LS_KEYS.users, users);
+      }
+      session = { userId: user.id, name: user.name };
+      save(LS_KEYS.session, session);
+      renderAuth(); renderUsersInFilters();
+    });
+    signOutBtn.addEventListener('click', () => {
+      session = { userId: '', name: '' };
+      save(LS_KEYS.session, session);
+      renderAuth();
+    });
+
+    // Bottom nav
+    const panels = {
+      scan: document.getElementById('panel-scan'),
+      items: document.getElementById('panel-items'),
+      logs: document.getElementById('panel-logs')
+    };
+    const navBtns = document.querySelectorAll('.nav-btn');
+    function showPanel(name) {
+      Object.entries(panels).forEach(([k, el]) => {
+        if (k === name) el.classList.remove('hidden');
+        else el.classList.add('hidden');
+      });
+      navBtns.forEach(btn => {
+        if (btn.dataset.panel === name) {
+          btn.classList.add('text-emerald-400');
+          btn.classList.remove('text-slate-400');
+        } else {
+          btn.classList.remove('text-emerald-400');
+          btn.classList.add('text-slate-400');
+        }
+      });
+    }
+    navBtns.forEach(btn => {
+      btn.addEventListener('click', () => showPanel(btn.dataset.panel));
+    });
+
+    // Categories
+    const categorySelect = document.getElementById('categorySelect');
+    const filterCat = document.getElementById('filterCat');
+    const logFilterCat = document.getElementById('logFilterCat');
+    const newCatEmoji = document.getElementById('newCatEmoji');
+    const newCatName = document.getElementById('newCatName');
+    const addCatBtn = document.getElementById('addCatBtn');
+    const catMsg = document.getElementById('catMsg');
+    function renderCategories(selectedId) {
+      function fillSelect(sel, allLabel) {
+        sel.innerHTML = '';
+        if (allLabel) {
+          const o = document.createElement('option');
+          o.value = 'all';
+          o.textContent = allLabel;
+          sel.appendChild(o);
+        }
+        categories.forEach(c => {
+          const o = document.createElement('option');
+          o.value = c.id;
+          o.textContent = `${c.emoji || '📦'} ${c.name}`;
+          sel.appendChild(o);
+        });
+      }
+      fillSelect(categorySelect, null);
+      fillSelect(filterCat, 'All');
+      fillSelect(logFilterCat, 'All categories');
+      if (selectedId) {
+        const opt = categorySelect.querySelector(`option[value="${selectedId}"]`);
+        if (opt) categorySelect.value = selectedId;
+      }
+    }
+    function addCategory() {
+      const name = (newCatName.value || '').trim();
+      const emoji = (newCatEmoji.value || '').trim() || '📦';
+      if (!name) { catMsg.textContent = 'Type a name for the category.'; return; }
+      const id = slugify(name) || uid();
+      if (categories.some(c => c.id === id || c.name.toLowerCase() === name.toLowerCase())) {
+        catMsg.textContent = 'Category already exists.'; return;
+      }
+      const cat = { id, name, emoji };
+      categories.push(cat);
+      save(LS_KEYS.categories, categories);
+      newCatName.value = '';
+      catMsg.textContent = `Added category "${name}".`;
+      renderCategories(id);
+    }
+    addCatBtn.addEventListener('click', e => {
+      e.preventDefault();
+      addCategory();
+    });
+    renderCategories();
+
+    // Scanner
+    const videoEl = document.getElementById('video');
+    const qrCanvas = document.getElementById('qrCanvas');
+    const qrCtx = qrCanvas.getContext('2d');
+    const startScanBtn = document.getElementById('startScan');
+    const stopScanBtn = document.getElementById('stopScan');
+    const scanMsg = document.getElementById('scanMsg');
+    const scanActionSelect = document.getElementById('scanActionSelect');
+    const codeInput = document.getElementById('codeInput');
+    let activeStream = null;
+    let scanRunning = false;
+    let lastScanCode = '';
+    let lastScanTime = 0;
+    function msg(t) { scanMsg.textContent = t || ''; }
+    async function startScanner() {
+      msg('');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Camera access not supported in this browser.');
+        return;
+      }
+      startScanBtn.classList.add('hidden');
+      stopScanBtn.classList.remove('hidden');
+      try {
+        activeStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
+      } catch (e) {
+        alert('Camera blocked or unavailable.\n\n' + e);
+        stopScanner();
+        return;
+      }
+      videoEl.setAttribute('playsinline', 'true');
+      videoEl.srcObject = activeStream;
+      videoEl.muted = true;
+      videoEl.onloadedmetadata = () => {
+        videoEl.play();
+        qrCanvas.width = videoEl.videoWidth || 480;
+        qrCanvas.height = videoEl.videoHeight || 640;
+        scanRunning = true;
+        scanLoop();
+      };
+    }
+    function stopScanner() {
+      scanRunning = false;
+      if (activeStream) {
+        activeStream.getTracks().forEach(t => t.stop());
+        activeStream = null;
+      }
+      videoEl.srcObject = null;
+      startScanBtn.classList.remove('hidden');
+      stopScanBtn.classList.add('hidden');
+    }
+    startScanBtn.addEventListener('click', startScanner);
+    stopScanBtn.addEventListener('click', stopScanner);
+    function handleScannedCode(raw) {
+      const clean = (raw || '').trim();
+      if (!clean) return;
+      const now = Date.now();
+      if (clean === lastScanCode && now - lastScanTime < 1500) return;
+      scanSound.play()
+      scanSound.loop = false;
+      lastScanCode = clean;
+      lastScanTime = now;
+      const mode = (scanActionSelect && scanActionSelect.value) || 'toggle';
+      codeInput.value = clean;
+      if (mode === 'fill') {
+        msg(`Scanned: ${clean}. You can now save it as an item.`);
+        return;
+      }
+      const item = items.find(i => i.code === clean);
+      if (!item) {
+        msg(`Scanned code ${clean} is not in your items yet. Fill name and save.`);
+        return;
+      }
+      let target = mode;
+      if (mode === 'toggle') {
+        target = item.status === 'in' ? 'out' : 'in';
+      }
+      const note = `via scanner (${target})`;
+      setStatus(item.id, target, note);
+      const label = target === 'in' ? 'Checked IN' : 'Checked OUT';
+      msg(`✅ ${label} "${item.name}" at ${new Date().toLocaleTimeString()}`);
+    }
+    function scanLoop() {
+      if (!scanRunning) return;
+      if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
+        qrCanvas.width = videoEl.videoWidth;
+        qrCanvas.height = videoEl.videoHeight;
+        qrCtx.drawImage(videoEl, 0, 0, qrCanvas.width, qrCanvas.height);
+        const img = qrCtx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+        if (code && code.data) {
+          handleScannedCode(code.data);
+
+        }
+      }
+      requestAnimationFrame(scanLoop);
+    }
+
+    // Items & logs
+    const itemNameInput = document.getElementById('itemNameInput');
+    const skuInput = document.getElementById('skuInput');
+    const noteInput = document.getElementById('noteInput');
+    const addItemBtn = document.getElementById('addItemBtn');
+    const clearAddBtn = document.getElementById('clearAddBtn');
+    const itemsGrid = document.getElementById('itemsGrid');
+    const noItems = document.getElementById('noItems');
+    const searchInput = document.getElementById('searchInput');
+    addItemBtn.addEventListener('click', () => {
+      if (!session.userId) return alert('Please sign in first');
+      const code = (codeInput.value || '').trim();
+      const name = (itemNameInput.value || '').trim();
+      const categoryId = categorySelect.value;
+      const sku = (skuInput.value || '').trim();
+      const note = (noteInput.value || '').trim();
+      if (!code || !name) return alert('Code and name are required');
+      if (items.find(i => i.code === code)) return alert('An item with this code already exists');
+      const item = { id: uid(), code, name, sku: sku || undefined, note: note || undefined, categoryId, createdAt: nowISO(), status: 'in' };
+      items.unshift(item);
+      save(LS_KEYS.items, items);
+      pushLog({ type: 'create', itemId: item.id, meta: { code, name, categoryId } });
+      itemNameInput.value = '';
+      skuInput.value = '';
+      noteInput.value = '';
+      renderItems();
+      renderLogs();
+    });
+    clearAddBtn.addEventListener('click', () => {
+      codeInput.value = '';
+      itemNameInput.value = '';
+      skuInput.value = '';
+      noteInput.value = '';
+    });
+    function renderItems() {
+      const q = (searchInput.value || '').toLowerCase();
+      const cf = filterCat.value;
+      let list = [...items];
+      if (cf !== 'all') list = list.filter(i => i.categoryId === cf);
+      if (q) {
+        list = list.filter(i => [i.name, i.code, i.sku, i.note].filter(Boolean).some(v => String(v).toLowerCase().includes(q)));
+      }
+      itemsGrid.innerHTML = '';
+      if (!list.length) {
+        noItems.classList.remove('hidden'); return;
+      } else noItems.classList.add('hidden');
+      list.forEach(it => {
+        const cat = categories.find(c => c.id === it.categoryId);
+        const card = document.createElement('div');
+        card.className = 'border border-slate-700 rounded-xl p-2 bg-slate-950/70 flex flex-col gap-1';
+        const statusBadge = it.status === 'in'
+          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+          : 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+        card.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="text-[13px] font-medium flex items-center gap-1.5">
+          <span>${cat?.emoji || '📦'}</span>
+          <span>${it.name}</span>
+        </div>
+        <span class="text-[10px] px-2 py-0.5 rounded-full border ${statusBadge}">
+          ${it.status.toUpperCase()}
+        </span>
+      </div>
+      <div class="text-[11px] text-slate-400 break-all">Code: ${it.code}</div>
+      ${it.sku ? `<div class="text-[11px] text-slate-400">SKU: ${it.sku}</div>` : ''}
+      ${cat ? `<div class="text-[11px] text-slate-400">Cat: ${cat.name}</div>` : ''}
+      ${it.note ? `<div class="text-[11px] text-slate-400">Note: ${it.note}</div>` : ''}
+      <div class="flex gap-1 mt-1">
+        <button class="btn-in flex-1 bg-emerald-500/90 text-black rounded-lg py-1 text-[11px]">Check IN</button>
+        <button class="btn-out flex-1 border border-slate-600 rounded-lg py-1 text-[11px]">Check OUT</button>
+        <button class="btn-del px-2 border border-rose-500/60 text-rose-300 rounded-lg text-[11px]">✕</button>
+      </div>
+      <div class="text-[10px] text-slate-500 mt-1">Added: ${fmtDate(it.createdAt)}</div>
+    `;
+        const btnIn = card.querySelector('.btn-in');
+        const btnOut = card.querySelector('.btn-out');
+        const btnDel = card.querySelector('.btn-del');
+        btnIn.addEventListener('click', () => setStatus(it.id, 'in', 'manual mobile'));
+        btnOut.addEventListener('click', () => setStatus(it.id, 'out', 'manual mobile'));
+        btnDel.addEventListener('click', () => {
+          if (!confirm('Delete this item?')) return;
+          items = items.filter(x => x.id !== it.id);
+          save(LS_KEYS.items, items);
+          pushLog({ type: 'delete', itemId: it.id, meta: { name: it.name, code: it.code } });
+          renderItems(); renderLogs();
+        });
+        itemsGrid.appendChild(card);
+      });
+    }
+    async function setStatus(itemId, type, note) {
+      if (!session.userId) return alert('Please sign in first');
+      items = items.map(it => it.id === itemId ? { ...it, status: type } : it);
+      save(LS_KEYS.items, items);
+      pushLog({ type, itemId, meta: { note: note || '' } });
+      renderItems();
+      renderLogs();
+    }
+    searchInput.addEventListener('input', renderItems);
+    filterCat.addEventListener('change', renderItems);
+    renderItems();
+
+    // Logs
+    const logsBody = document.getElementById('logsBody');
+    const logFilterUser = document.getElementById('logFilterUser');
+    const logFilterType = document.getElementById('logFilterType');
+    const logFilterItem = document.getElementById('logFilterItem');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    function renderUsersInFilters() {
+      logFilterUser.innerHTML = '<option value="all">All users</option>';
+      users.forEach(u => {
+        const o = document.createElement('option');
+        o.value = u.id;
+        o.textContent = u.name;
+        logFilterUser.appendChild(o);
+      });
+    }
+    function renderItemsInLogFilter() {
+      logFilterItem.innerHTML = '<option value="all">All items</option>';
+      items.forEach(i => {
+        const o = document.createElement('option');
+        o.value = i.id;
+        o.textContent = i.name;
+        logFilterItem.appendChild(o);
+      });
+    }
+    function pushLog({ type, itemId, meta }) {
+      if (!session.userId) return;
+      const e = { id: uid(), ts: nowISO(), userId: session.userId, userName: session.name, type, itemId, meta: meta || {} };
+      logs.unshift(e);
+      save(LS_KEYS.logs, logs);
+    }
+    function renderLogs() {
+      renderUsersInFilters();
+      renderItemsInLogFilter();
+      logsBody.innerHTML = '';
+      const fu = logFilterUser.value;
+      const ft = logFilterType.value;
+      const fi = logFilterItem.value;
+      const fc = logFilterCat.value;
+      logs
+        .filter(l => fu === 'all' || l.userId === fu)
+        .filter(l => ft === 'all' || l.type === ft)
+        .filter(l => fi === 'all' || l.itemId === fi)
+        .filter(l => {
+          if (fc === 'all') return true;
+          const it = items.find(i => i.id === l.itemId);
+          return it?.categoryId === fc;
+        })
+        .forEach(l => {
+          const it = items.find(i => i.id === l.itemId);
+          const cat = categories.find(c => c.id === it?.categoryId);
+          const tr = document.createElement('tr');
+          tr.className = 'border-t border-slate-800';
+          const meta = l.meta && Object.keys(l.meta).length ? JSON.stringify(l.meta) : '-';
+          tr.innerHTML = `
+        <td class="px-2 py-1 align-top whitespace-nowrap">${fmtDate(l.ts)}</td>
+        <td class="px-2 py-1 align-top">${l.userName}</td>
+        <td class="px-2 py-1 align-top">${l.type}</td>
+        <td class="px-2 py-1 align-top">${it ? it.name : '(deleted item)'}</td>
+        <td class="px-2 py-1 align-top">${cat ? cat.name : ''}</td>
+        <td class="px-2 py-1 align-top text-slate-400 break-all">${meta}</td>
+      `;
+          logsBody.appendChild(tr);
+        });
+    }
+    [logFilterUser, logFilterType, logFilterItem, logFilterCat].forEach(sel => sel.addEventListener('change', renderLogs));
+    renderLogs();
+
+    // Export CSV
+    exportCsvBtn.addEventListener('click', () => {
+      const header = ['id', 'timestamp', 'user', 'type', 'itemId', 'itemCode', 'itemName', 'category', 'meta'].join(',');
+      const rows = logs.map(l => {
+        const it = items.find(i => i.id === l.itemId);
+        const cat = categories.find(c => c.id === it?.categoryId);
+        return [
+          l.id,
+          l.ts,
+          l.userName,
+          l.type,
+          l.itemId,
+          it?.code || '',
+          it?.name || '',
+          cat?.name || '',
+          JSON.stringify(l.meta).replaceAll(',', ';')
+        ].join(',');
+      });
+      const blob = new Blob([header + '\n' + rows.join('\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `inventory-mobile-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+
+</html>
